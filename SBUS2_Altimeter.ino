@@ -35,6 +35,23 @@
 //    https://github.com/RobTillaart/Arduino
 //    modified by me for SPI use:
 //    https://github.com/Troynica/MS5611
+//
+//
+//  The altitude calculation is an approximate. I use a linear function with
+//  correction to calculate the altitude from the barometric pressure. This
+//  is within a few meters accurate up to 500 meters. Enough precision for
+//  model aircraft. The function doing this caculation is called:
+//  calcAltitudeInt()
+//
+//  Precision is measured against the (already simplified) common formula:
+//     Alt = 44330 * (1 - (P/P0)^0.190295 );
+//  I also put this formula as a function in the sketch: calcAltitudeFloat()
+//
+//  The output difference for altitudes up to 300m is less than half a meter,
+//  for altitudes up to 700m, it is ~1m, for altitudes up to 1000m, it is ~5m.
+//    (calculated for a location at sea level with P0 varying from 100000
+//    to 103000 Pa).
+
 
 #include <SPI.h>
 #include <Wire.h>
@@ -42,13 +59,18 @@
 #include "MS5611.h"
 
 #define LED         3
+
+#define FSLED       4
 #define SLOT_TEMP   3
-#define SLOT_ALT    5
-#define SLOT_VARIO  4
+#define SLOT_ALT    2
+#define SLOT_VARIO  1
 
 SBUS      sbus(Serial);
 MS5611    MS5611(2);
 
+#define CONST1 61
+uint64_t const0;
+uint32_t p0;
 int32_t   currentAlt, prevAlt, vario;
 int32_t   alt = 0;
 int16_t   Temp = 0;
@@ -57,66 +79,91 @@ uint32_t  nextDisplay = 0;
 
 void setup() {
   pinMode(LED, OUTPUT);
+  pinMode(FSLED, OUTPUT);
   digitalWrite(LED, HIGH);
+  digitalWrite(FSLED, HIGH);
   Wire.begin();
   SPI.begin();
   MS5611.init();
   sbus.begin(false);
+  MS5611.read(12);
+  p0=MS5611.getPressure();
+  const0  = p0*1400ULL;
+  const0 /= 23;
+  const0 += 13503913;
   delay(500);
   digitalWrite(LED, LOW);
+  sendZero();
 }
 
 
 void loop() {
+  uint32_t goodFramesPrev,goodFrames;
+
   sbus.process();
-  MS5611.read(12);
-
-  if (sbus.getGoodFrames() == 0 || sbus.getFailsafeStatus() == SBUS_FAILSAFE_ACTIVE) {
-    altimeterSetZero();
+  goodFramesPrev = goodFrames;
+  goodFrames = sbus.getGoodFrames();
+  if (goodFrames == 0 || sbus.getFailsafeStatus() == SBUS_FAILSAFE_ACTIVE) {
+  //if (sbus.getFailsafeStatus() == SBUS_FAILSAFE_ACTIVE) {
+    sendZero();
   }
-  
-  
-
   if (millis() >= nextDisplay) {
     //digitalWrite(LED, HIGH);
-    alt=110;
+    MS5611.read(12);
+    alt=calcAltitudeInt(MS5611.getPressure(),p0);
     currentMillis=millis();
     nextDisplay = currentMillis + 900;
-    currentAlt=alt;                         // Altitude in dm
+    currentAlt=alt;                         // Altitude in cm
     diffMillis=currentMillis-prevMillis;
-    vario=100*(currentAlt-prevAlt);         // Alt delta in mm
+    vario=10*(currentAlt-prevAlt);          // Alt delta in mm
     vario=100*vario/diffMillis;             // Vario in dm/s
-    
     prevMillis=currentMillis;
     prevAlt=currentAlt;
 
-    Temp=MS5611.getTemperature();
-    sendTemp(SLOT_TEMP, Temp);
+    alt/=10;                                // Alt cm -> dm
+    Temp=MS5611.getTemperature()/100;
+    sendTemp(SLOT_TEMP, MS5611.getPressure()-101900);
     sendVario(SLOT_VARIO,vario);
-    sendAlt(SLOT_ALT, alt);
+    sendAlt(SLOT_ALT,alt);
     //digitalWrite(LED, LOW);
   }
 }
 
 
+int32_t calcAltitudeFloat(int32_t _p, int32_t _p0) {
+  float _ac  = (float)44330 * (1 - pow(((float) _p/_p0), 0.190295));
+  return (int32_t)_ac;
+}
 
+int32_t calcAltitudeInt(uint64_t _p, uint64_t _p0) {
+  int64_t _ac;
+    _ac  = const0;
+    _ac  += (_p0-_p)*CONST1;
+    _ac *= _p;
+    _ac /= _p0;
+    _ac  = const0 - _ac;
+    _ac  = _ac >> 4;
+  
+   return (int32_t)(_ac);
+}
 
-void altimeterSetZero() {
-  digitalWrite(LED, HIGH);
+void sendZero() {
+  digitalWrite(FSLED, HIGH);
   sendAlt(SLOT_ALT, 0);
   delay(2000);
-  digitalWrite(LED, LOW);
+  digitalWrite(FSLED, LOW);
 }
 
 
 void sendAlt(byte slot, int _altitude) {
   byte data;
-  _altitude=(_altitude/10)+8192;
+  _altitude /= 10;
+  _altitude += 8192;
+  data       = (_altitude >> 8) | B11000000;
   Wire.beginTransmission(0x78);
   Wire.write(slot+32);
-  data=(_altitude >> 8) | B11000000;
   Wire.write(data);
-  data=_altitude & 255;
+  data = _altitude & 255;
   Wire.write(data);
   Wire.endTransmission();
 }
