@@ -6,7 +6,7 @@ It also reads S.BUS data from the S.BUS2 port to detect no-signal and failsafe c
 
 It is primarily meant as a altimeter/variometer for RC model aircraft but extra functionality can easily be added.
 
-####Written by Roy van der Kraan
+#### Written by Roy van der Kraan
 
 ### Dependencies
 - SPI library
@@ -24,3 +24,4 @@ The I2C-to-S.BUS2 interface I am using was developped by **Thomas Hedegaard Jør
 The SBUS library was written by **Dennis Marinus** [GitHub](https://github.com/zendes/SBUS)
 
 The MS5611 library was originally written by **Rob Tillaart** ([GitHub](https://github.com/RobTillaart/Arduino)) modified by me for SPI use ([GitHub](https://github.com/Troynica/MS5611)).
+
