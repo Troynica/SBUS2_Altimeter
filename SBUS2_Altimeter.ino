@@ -86,43 +86,46 @@ void setup() {
   SPI.begin();
   MS5611.init();
   sbus.begin(false);
+  MS5611.read();
+  delay(1000);
   MS5611.read(12);
   p0=MS5611.getPressure();
   const0  = p0*1400ULL;
   const0 /= 23;
   const0 += 13503913;
-  delay(500);
+  sendAlt(SLOT_ALT, 0);
   digitalWrite(LED, LOW);
-  sendZero();
 }
 
 
 void loop() {
-  uint32_t goodFramesPrev,goodFrames;
-
   sbus.process();
-  goodFramesPrev = goodFrames;
-  goodFrames = sbus.getGoodFrames();
-  if (goodFrames == 0 || sbus.getFailsafeStatus() == SBUS_FAILSAFE_ACTIVE) {
-  //if (sbus.getFailsafeStatus() == SBUS_FAILSAFE_ACTIVE) {
-    sendZero();
+  if (sbus.getGoodFrames() < 100 || sbus.getFailsafeStatus()) {
+    digitalWrite(FSLED, HIGH);
+    sendAlt(SLOT_ALT, 0);
+    while (sbus.getGoodFrames() < 100 || sbus.getFailsafeStatus()) {
+      sbus.process();
+    }
+    digitalWrite(FSLED, LOW);
+    delay(2000);
   }
   if (millis() >= nextDisplay) {
+    nextDisplay = currentMillis + 500;
     //digitalWrite(LED, HIGH);
     MS5611.read(12);
-    alt=calcAltitudeInt(MS5611.getPressure(),p0);
     currentMillis=millis();
-    nextDisplay = currentMillis + 900;
+    alt=calcAltitudeInt(MS5611.getPressure(),p0);
     currentAlt=alt;                         // Altitude in cm
     diffMillis=currentMillis-prevMillis;
-    vario=10*(currentAlt-prevAlt);          // Alt delta in mm
-    vario=100*vario/diffMillis;             // Vario in dm/s
-    prevMillis=currentMillis;
-    prevAlt=currentAlt;
+    vario  = currentAlt-prevAlt;            // Alt delta in cm
+    vario  = vario < 1;                     // multiply by 2 (500ms)
 
-    alt/=10;                                // Alt cm -> dm
-    Temp=MS5611.getTemperature()/100;
-    sendTemp(SLOT_TEMP, MS5611.getPressure()-101900);
+    prevMillis = currentMillis;
+    prevAlt    = currentAlt;
+
+    alt /= 10L;                             // Alt cm -> dm
+    Temp = MS5611.getTemperature() / 100;
+    sendTemp(SLOT_TEMP, Temp);
     sendVario(SLOT_VARIO,vario);
     sendAlt(SLOT_ALT,alt);
     //digitalWrite(LED, LOW);
@@ -147,12 +150,6 @@ int32_t calcAltitudeInt(uint64_t _p, uint64_t _p0) {
    return (int32_t)(_ac);
 }
 
-void sendZero() {
-  digitalWrite(FSLED, HIGH);
-  sendAlt(SLOT_ALT, 0);
-  delay(2000);
-  digitalWrite(FSLED, LOW);
-}
 
 
 void sendAlt(byte slot, int _altitude) {
