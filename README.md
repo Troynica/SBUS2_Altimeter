@@ -11,10 +11,11 @@ It is primarily meant as a altimeter/variometer for RC model aircraft but extra 
 ### Dependencies
 - SPI library
 - Wire library
+- MS5611 library
 - SBUS library
 
 ### Hardware requirements
-- Arduino compatible controller or board (ATMega163p and ATMega328p tested)
+- Arduino compatible controller or board (ATmega168p and ATmega328p tested)
 - MS5611 (device or board like GY-63)
 - I2C-to-S.BUS2 interface
 
