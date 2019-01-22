@@ -59,7 +59,7 @@
 #include "MS5611.h"
 
 #define LED         3
-
+#define BLED        5
 #define FSLED       4
 #define SLOT_TEMP   3
 #define SLOT_ALT    2
@@ -69,8 +69,8 @@ SBUS      sbus(Serial);
 MS5611    MS5611(2);
 
 #define CONST1 61
-uint64_t const0;
-uint32_t p0;
+uint64_t  const0;
+uint32_t  p0;
 int32_t   currentAlt, prevAlt, vario;
 int32_t   alt = 0;
 int16_t   Temp = 0;
@@ -78,7 +78,9 @@ uint32_t  currentMillis, prevMillis, diffMillis;
 uint32_t  nextDisplay = 0;
 
 void setup() {
+  sendAlt(SLOT_ALT, 0);
   pinMode(LED, OUTPUT);
+  pinMode(BLED, OUTPUT);
   pinMode(FSLED, OUTPUT);
   digitalWrite(LED, HIGH);
   digitalWrite(FSLED, HIGH);
@@ -86,14 +88,25 @@ void setup() {
   SPI.begin();
   MS5611.init();
   sbus.begin(false);
-  MS5611.read();
-  delay(1000);
+
+  // take average of 4 measurements for p0 :
   MS5611.read(12);
-  p0=MS5611.getPressure();
-  const0  = p0*1400ULL;
-  const0 /= 23;
-  const0 += 13503913;
-  sendAlt(SLOT_ALT, 0);
+  delay(300);
+  p0  = MS5611.getPressure();
+  MS5611.read(12);
+  delay(300);
+  p0 += MS5611.getPressure();
+  MS5611.read(12);
+  delay(300);
+  p0 += MS5611.getPressure();
+  MS5611.read(12);
+  delay(300);
+  p0 += MS5611.getPressure();
+  p0 = p0 >> 2;  // divide by 4
+  
+  const0  = (uint64_t)p0*1400ULL;
+  const0 /= 23ULL;
+  const0 += 13503913ULL;
   digitalWrite(LED, LOW);
 }
 
@@ -101,9 +114,10 @@ void setup() {
 void loop() {
   sbus.process();
   if (sbus.getGoodFrames() < 100 || sbus.getFailsafeStatus()) {
-    digitalWrite(FSLED, HIGH);
+    digitalWrite(FSLED, (boolean)(millis()&256));
     sendAlt(SLOT_ALT, 0);
     while (sbus.getGoodFrames() < 100 || sbus.getFailsafeStatus()) {
+      digitalWrite(FSLED, (boolean)(millis()&256));
       sbus.process();
     }
     digitalWrite(FSLED, LOW);
@@ -111,7 +125,7 @@ void loop() {
   }
   if (millis() >= nextDisplay) {
     nextDisplay = currentMillis + 500;
-    //digitalWrite(LED, HIGH);
+    digitalWrite(BLED, HIGH);
     MS5611.read(12);
     currentMillis=millis();
     alt=calcAltitudeInt(MS5611.getPressure(),p0);
@@ -128,7 +142,7 @@ void loop() {
     sendTemp(SLOT_TEMP, Temp);
     sendVario(SLOT_VARIO,vario);
     sendAlt(SLOT_ALT,alt);
-    //digitalWrite(LED, LOW);
+    digitalWrite(BLED, LOW);
   }
 }
 
