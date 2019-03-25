@@ -24,6 +24,9 @@ It is primarily meant as a altimeter/variometer for RC model aircraft but extra 
 - S.BUS2 equipped RC set
 - some additional electronics where needed (like logic level converters on data lines)
 
+Warning: try not to feed the data lines with 5V!
+The break out board I used has a voltage regulator for the MS5611, but it does not protect the data lines from overvoltage. I have destroyed an MS5611 by using 5V...
+
 The I2C-to-S.BUS2 interface I am using was developped by **Thomas Hedegaard Jørgensen**  and can be obtained from here:
  [shop.tje.dk](https://shop.tje.dk/catalog/product_info.php?products_id=42)
 
